@@ -1,0 +1,80 @@
+{
+  "id": "DIAG-FLOW",
+  "type": "function-flow",
+  "name": "创建订单：从提交到结果",
+  "summary": "虚构示例：创建订单：从提交到结果。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "TB",
+  "nodes": [
+    {
+      "id": "start",
+      "label": "客户提交购物车",
+      "entity": "PAGE-CHECKOUT",
+      "shape": "start"
+    },
+    {
+      "id": "check",
+      "label": "订单符合创建规则？",
+      "entity": "FEATURE-CREATE",
+      "shape": "decision"
+    },
+    {
+      "id": "save",
+      "label": "保存订单",
+      "entity": "TABLE-ORDERS",
+      "shape": "data"
+    },
+    {
+      "id": "notify",
+      "label": "返回结果并安排通知",
+      "entity": "JOB-NOTIFY",
+      "shape": "end"
+    },
+    {
+      "id": "reject",
+      "label": "展示拒绝原因",
+      "entity": "PAGE-CHECKOUT",
+      "shape": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "check",
+      "label": "服务端校验",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "check",
+      "to": "save",
+      "label": "是",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "check",
+      "to": "reject",
+      "label": "否",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "save",
+      "to": "notify",
+      "label": "事务提交成功",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ]
+}

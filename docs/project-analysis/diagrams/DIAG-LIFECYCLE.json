@@ -1,0 +1,66 @@
+{
+  "id": "DIAG-LIFECYCLE",
+  "type": "lifecycle",
+  "name": "订单状态：确认到完成",
+  "summary": "虚构示例：订单状态：确认到完成。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "draft",
+      "label": "草稿",
+      "entity": "FEATURE-CREATE",
+      "shape": "start"
+    },
+    {
+      "id": "confirmed",
+      "label": "已确认",
+      "entity": "COL-STATUS",
+      "shape": "action"
+    },
+    {
+      "id": "fulfilling",
+      "label": "履约中",
+      "entity": "COL-STATUS",
+      "shape": "action"
+    },
+    {
+      "id": "completed",
+      "label": "已完成",
+      "entity": "COL-STATUS",
+      "shape": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "confirmed",
+      "label": "创建成功",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "confirmed",
+      "to": "fulfilling",
+      "label": "开始履约",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "fulfilling",
+      "to": "completed",
+      "label": "履约完成",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ]
+}

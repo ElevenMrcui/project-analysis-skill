@@ -1,0 +1,50 @@
+{
+  "id": "DIAG-ER",
+  "type": "er",
+  "name": "数据表关系：租户与订单",
+  "summary": "虚构示例：数据表关系：租户与订单。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "TB",
+  "nodes": [
+    {
+      "id": "tenants",
+      "label": "租户",
+      "entity": "TABLE-TENANTS",
+      "shape": "data"
+    },
+    {
+      "id": "orders",
+      "label": "订单",
+      "entity": "TABLE-ORDERS",
+      "shape": "data"
+    }
+  ],
+  "edges": [
+    {
+      "from": "tenants",
+      "to": "orders",
+      "label": "tenants.id = orders.tenant_id",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "relationship": "foreign-key",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceColumns": [
+        "TENANT-ID"
+      ],
+      "targetColumns": [
+        "COL-TENANT"
+      ],
+      "constraintName": "fk_orders_tenant_id",
+      "onDelete": "RESTRICT",
+      "onUpdate": "NO ACTION"
+    }
+  ]
+}

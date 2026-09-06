@@ -1,0 +1,66 @@
+{
+  "id": "DIAG-DATAFLOW",
+  "type": "dataflow",
+  "name": "租户字段流向：身份到存储",
+  "summary": "虚构示例：租户字段流向：身份到存储。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "api",
+      "label": "请求身份 / 租户上下文",
+      "entity": "API-CREATE",
+      "shape": "action"
+    },
+    {
+      "id": "service",
+      "label": "校验当前租户的操作权限",
+      "entity": "SERVICE-ORDER",
+      "shape": "decision"
+    },
+    {
+      "id": "tenant",
+      "label": "tenant_id / 数据归属",
+      "entity": "COL-TENANT",
+      "shape": "data"
+    },
+    {
+      "id": "table",
+      "label": "订单按租户关联",
+      "entity": "TABLE-ORDERS",
+      "shape": "data"
+    }
+  ],
+  "edges": [
+    {
+      "from": "api",
+      "to": "service",
+      "label": "可信身份上下文",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "service",
+      "to": "tenant",
+      "label": "权限通过",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "tenant",
+      "to": "table",
+      "label": "写入订单",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ]
+}

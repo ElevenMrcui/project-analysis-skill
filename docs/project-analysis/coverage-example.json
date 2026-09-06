@@ -1,0 +1,35 @@
+{
+  "status": "incomplete",
+  "generatedAt": "2026-09-06T06:01:22.921881+00:00",
+  "issues": [
+    {
+      "code": "UNVERIFIED",
+      "subject": "data",
+      "message": "Unverified claim"
+    },
+    {
+      "code": "OPEN_GAP",
+      "subject": "GAP-LIVE-DB",
+      "message": "示例未读取真实数据库和业务源码。"
+    }
+  ],
+  "limitations": [
+    {
+      "subject": "project",
+      "message": "Synthetic demonstration, not a real project analysis"
+    }
+  ],
+  "metrics": {
+    "manifestEntries": 0,
+    "reportedEntries": 0,
+    "eligibleFiles": 0,
+    "reviewedFiles": 0,
+    "fileReviewPercent": null,
+    "excludedEntries": 0,
+    "entities": 19,
+    "discoveryCandidates": 19,
+    "mappedCandidates": 19,
+    "chains": 2,
+    "issues": 2
+  }
+}

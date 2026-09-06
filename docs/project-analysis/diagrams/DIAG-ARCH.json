@@ -1,0 +1,94 @@
+{
+  "id": "DIAG-ARCH",
+  "type": "architecture",
+  "name": "项目架构：请求、存储与通知边界",
+  "summary": "虚构示例：项目架构：请求、存储与通知边界。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "web",
+      "label": "客户结算页 / React",
+      "entity": "PAGE-CHECKOUT",
+      "shape": "action"
+    },
+    {
+      "id": "api",
+      "label": "订单接口 / TypeScript",
+      "entity": "API-CREATE",
+      "shape": "action"
+    },
+    {
+      "id": "service",
+      "label": "订单服务 / 校验与事务",
+      "entity": "SERVICE-ORDER",
+      "shape": "action"
+    },
+    {
+      "id": "db",
+      "label": "订单存储 / PostgreSQL",
+      "entity": "TABLE-ORDERS",
+      "shape": "data"
+    },
+    {
+      "id": "event",
+      "label": "订单创建事件",
+      "entity": "EVENT-CREATED",
+      "shape": "action"
+    },
+    {
+      "id": "job",
+      "label": "确认通知 / Python",
+      "entity": "JOB-NOTIFY",
+      "shape": "action"
+    }
+  ],
+  "edges": [
+    {
+      "from": "web",
+      "to": "api",
+      "label": "HTTPS 请求",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "api",
+      "to": "service",
+      "label": "经权限校验的调用",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "service",
+      "to": "db",
+      "label": "事务写入",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "service",
+      "to": "event",
+      "label": "提交后经 outbox 发布",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "event",
+      "to": "job",
+      "label": "消息投递",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ]
+}

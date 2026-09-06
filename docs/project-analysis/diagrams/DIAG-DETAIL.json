@@ -1,0 +1,164 @@
+{
+  "id": "DIAG-DETAIL",
+  "type": "detail-flow",
+  "name": "创建细节：权限、重复请求与回滚",
+  "summary": "虚构示例：创建细节：权限、重复请求与回滚。节点可关联对象详情，不能视为真实项目结论。",
+  "status": "verified",
+  "features": [
+    "FEATURE-CREATE"
+  ],
+  "evidence": [
+    "EV-DEMO"
+  ],
+  "direction": "TB",
+  "nodes": [
+    {
+      "id": "start",
+      "label": "接收请求",
+      "entity": "API-CREATE",
+      "shape": "start"
+    },
+    {
+      "id": "auth",
+      "label": "当前租户权限通过？",
+      "entity": "FEATURE-CREATE",
+      "shape": "decision"
+    },
+    {
+      "id": "deny",
+      "label": "拒绝越权请求",
+      "entity": "API-CREATE",
+      "shape": "end"
+    },
+    {
+      "id": "duplicate",
+      "label": "已有相同幂等键？",
+      "entity": "SERVICE-ORDER",
+      "shape": "decision"
+    },
+    {
+      "id": "reuse",
+      "label": "返回已有订单",
+      "entity": "API-CREATE",
+      "shape": "end"
+    },
+    {
+      "id": "valid",
+      "label": "库存与输入有效？",
+      "entity": "SERVICE-ORDER",
+      "shape": "decision"
+    },
+    {
+      "id": "invalid",
+      "label": "返回校验错误",
+      "entity": "API-CREATE",
+      "shape": "end"
+    },
+    {
+      "id": "write",
+      "label": "事务写入并提交",
+      "entity": "TABLE-ORDERS",
+      "shape": "data"
+    },
+    {
+      "id": "commit",
+      "label": "提交成功？",
+      "entity": "SERVICE-ORDER",
+      "shape": "decision"
+    },
+    {
+      "id": "rollback",
+      "label": "撤回写入并返回错误",
+      "entity": "SERVICE-ORDER",
+      "shape": "end"
+    },
+    {
+      "id": "done",
+      "label": "返回订单并发布事件",
+      "entity": "EVENT-CREATED",
+      "shape": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "auth",
+      "label": "校验",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "auth",
+      "to": "deny",
+      "label": "否",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "auth",
+      "to": "duplicate",
+      "label": "是",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "duplicate",
+      "to": "reuse",
+      "label": "是",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "duplicate",
+      "to": "valid",
+      "label": "否",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "valid",
+      "to": "invalid",
+      "label": "否",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "valid",
+      "to": "write",
+      "label": "是",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "write",
+      "to": "commit",
+      "label": "提交",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "commit",
+      "to": "rollback",
+      "label": "失败",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "from": "commit",
+      "to": "done",
+      "label": "成功",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ]
+}

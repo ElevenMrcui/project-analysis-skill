@@ -1,0 +1,2060 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "title": "订单履约 · 参考工作区",
+    "description": "订单履约参考系统：客户提交订单，服务端核验并保存，后台发送通知。全部业务内容均为虚构示例。",
+    "locale": "zh-CN",
+    "generatedAt": "2026-09-06T06:01:22.919411+00:00",
+    "example": true
+  },
+  "roots": [
+    {
+      "id": "demo",
+      "name": "Synthetic fulfillment example",
+      "revision": "synthetic-example-v1",
+      "dirty": false
+    }
+  ],
+  "files": [],
+  "entities": [
+    {
+      "id": "FEATURE-CREATE",
+      "kind": "feature",
+      "name": "创建订单",
+      "summary": "从购物车确认到订单持久化及异步通知的示例业务能力。",
+      "repo": "demo",
+      "module": "orders",
+      "language": "TypeScript",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "actors": [
+          "已登录客户"
+        ],
+        "trigger": "提交已确认的购物车",
+        "rules": [
+          "数量必须为正整数",
+          "金额由服务端计算",
+          "数据按租户隔离",
+          "重复幂等键复用已有订单"
+        ],
+        "inputs": [
+          "cartId",
+          "shippingAddressId",
+          "idempotencyKey"
+        ],
+        "outputs": [
+          "orderId",
+          "status",
+          "total"
+        ],
+        "errors": [
+          "权限不足",
+          "库存不足",
+          "地址无效"
+        ],
+        "permissions": "当前租户内的 orders:create 权限",
+        "sideEffects": [
+          "保存订单",
+          "记录待发送事件"
+        ],
+        "tests": [
+          "TEST-CREATE"
+        ],
+        "stateTransitions": [
+          "草稿 -> 已确认",
+          "已确认 -> 履约中",
+          "履约中 -> 已完成"
+        ]
+      },
+      "explanation": {
+        "purpose": "把客户确认的购物车变成可跟踪的订单。",
+        "howItWorks": [
+          "客户提交购物车、地址和用于识别重复请求的幂等键。",
+          "服务端检查权限、输入、库存及重复请求；不符合条件就拒绝。",
+          "校验通过后保存订单，并在事务提交后安排通知。"
+        ],
+        "example": "说明性假设：同一客户连续提交两次相同幂等键，预期复用同一订单，而不是生成两份。",
+        "failure": "权限不符、地址无效或库存不足时拒绝创建；事务失败时不保留本次写入。",
+        "boundaries": "以上为虚构行为模型，未通过真实源码、数据库或产品测试证实。",
+        "terms": [
+          {
+            "term": "幂等键",
+            "meaning": "用来识别同一次业务请求的标识；重复请求应复用原结果。"
+          },
+          {
+            "term": "事务",
+            "meaning": "一组数据库操作要么一起成功，要么一起撤回。"
+          }
+        ],
+        "evidence": [
+          "EV-DEMO"
+        ]
+      }
+    },
+    {
+      "id": "PAGE-CHECKOUT",
+      "kind": "page",
+      "name": "Checkout / 结算页",
+      "summary": "校验地址和购物车状态，提交订单后同步页面状态。",
+      "repo": "demo",
+      "module": "storefront",
+      "language": "React / TypeScript",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "route": "/checkout",
+        "actions": [
+          "确认地址",
+          "提交订单",
+          "重试失败请求"
+        ],
+        "states": [
+          "loading",
+          "ready",
+          "submitting",
+          "success",
+          "error"
+        ],
+        "permissions": "authenticated customer",
+        "accessibility": "Form errors associated with fields"
+      }
+    },
+    {
+      "id": "API-CREATE",
+      "kind": "api",
+      "name": "POST /api/orders",
+      "summary": "鉴权、参数校验、幂等检查后交由领域服务执行。",
+      "repo": "demo",
+      "module": "orders",
+      "language": "TypeScript",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "protocol": "HTTP JSON",
+        "operation": "POST /api/orders",
+        "request": {
+          "cartId": {
+            "type": "uuid",
+            "required": true
+          },
+          "shippingAddressId": {
+            "type": "uuid",
+            "required": true
+          },
+          "Idempotency-Key": {
+            "location": "header",
+            "type": "string"
+          }
+        },
+        "response": {
+          "201": {
+            "orderId": "uuid",
+            "status": "confirmed"
+          }
+        },
+        "errors": {
+          "400": "输入无效",
+          "401": "未授权",
+          "409": "库存冲突"
+        },
+        "authorization": "tenant-scoped orders:create",
+        "consumers": [
+          "PAGE-CHECKOUT"
+        ]
+      },
+      "explanation": {
+        "purpose": "接收前端创建订单的请求，并返回成功结果或明确的失败原因。",
+        "howItWorks": [
+          "接收 POST /api/orders 及 Idempotency-Key 请求头。",
+          "校验身份和请求，再交给订单服务处理。",
+          "成功返回订单标识；失败返回对应状态码及原因。"
+        ],
+        "example": "说明性假设：库存不足时返回 409，前端展示库存冲突。",
+        "failure": "校验失败不应创建订单；实际错误码和副作用须在目标项目中核验。",
+        "boundaries": "以上为虚构行为模型，未通过真实源码、数据库或产品测试证实。",
+        "terms": [
+          {
+            "term": "API",
+            "meaning": "程序之间约定好的请求入口和数据格式。"
+          }
+        ],
+        "evidence": [
+          "EV-DEMO"
+        ]
+      }
+    },
+    {
+      "id": "SERVICE-ORDER",
+      "kind": "symbol",
+      "name": "OrderService.create",
+      "summary": "在事务内创建订单与待发布事件。",
+      "repo": "demo",
+      "module": "orders",
+      "language": "TypeScript",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "signature": "create(input, tenant, idempotencyKey)",
+        "transaction": "订单与 outbox 在同一事务提交",
+        "concurrency": "幂等唯一约束，实际保障需源码核验",
+        "returns": "订单结果"
+      }
+    },
+    {
+      "id": "TABLE-ORDERS",
+      "kind": "table",
+      "name": "commerce.orders",
+      "summary": "订单主表，保留租户、金额、状态与创建时间。",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "qualifiedName": "demo.commerce.orders",
+        "columns": [
+          "COL-ID",
+          "COL-TENANT",
+          "COL-STATUS",
+          "COL-TOTAL",
+          "COL-CREATED"
+        ],
+        "keys": [
+          "PRIMARY KEY (id)"
+        ],
+        "indexes": [
+          "(tenant_id, created_at DESC)"
+        ],
+        "lifecycle": "创建后随履约更新状态，按数据保留规则归档",
+        "readers": [
+          "API-CREATE",
+          "JOB-NOTIFY"
+        ],
+        "writers": [
+          "SERVICE-ORDER"
+        ],
+        "schemaSource": "虚构结构，非运行库元数据"
+      },
+      "explanation": {
+        "purpose": "保存订单主记录；一行代表一个订单，包含所属租户、状态、总额和创建时间。",
+        "howItWorks": [
+          "订单服务创建主记录，id 唯一标识该订单。",
+          "tenant_id 指向所属租户，限定数据归属。",
+          "履约过程更新 status；total 保存订单金额。"
+        ],
+        "example": "说明性假设：某个订单状态从 confirmed 变为 fulfilling，表示开始履约，不代表已送达。",
+        "failure": "缺少必填字段或违反约束时写入失败；运行库约束尚未核验。",
+        "boundaries": "以上为虚构行为模型，未通过真实源码、数据库或产品测试证实。",
+        "terms": [
+          {
+            "term": "主键",
+            "meaning": "唯一标识表中一行数据的字段或字段组合。"
+          },
+          {
+            "term": "外键",
+            "meaning": "数据库约束，用来保证引用的另一张表记录确实存在。"
+          }
+        ],
+        "evidence": [
+          "EV-DEMO"
+        ]
+      }
+    },
+    {
+      "id": "COL-ID",
+      "kind": "column",
+      "name": "orders.id",
+      "summary": "唯一订单标识",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "parent": "TABLE-ORDERS",
+        "dataType": "uuid",
+        "nullable": false,
+        "default": "generated",
+        "constraints": [
+          "NOT NULL"
+        ],
+        "sensitivity": "内部业务数据",
+        "lineage": {
+          "source": "订单服务校验后的输入或数据库生成值",
+          "target": "commerce.orders.id"
+        },
+        "comment": "唯一订单标识",
+        "key": "PK"
+      }
+    },
+    {
+      "id": "COL-TENANT",
+      "kind": "column",
+      "name": "orders.tenant_id",
+      "summary": "所属租户标识",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "parent": "TABLE-ORDERS",
+        "dataType": "uuid",
+        "nullable": false,
+        "default": "none",
+        "constraints": [
+          "NOT NULL",
+          "FK -> tenancy.tenants.id",
+          "ON DELETE RESTRICT"
+        ],
+        "sensitivity": "内部业务数据",
+        "lineage": {
+          "source": "订单服务校验后的输入或数据库生成值",
+          "target": "commerce.orders.tenant_id"
+        },
+        "comment": "所属租户标识",
+        "key": "FK",
+        "references": [
+          "TENANT-ID"
+        ]
+      }
+    },
+    {
+      "id": "COL-STATUS",
+      "kind": "column",
+      "name": "orders.status",
+      "summary": "订单当前业务状态",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "parent": "TABLE-ORDERS",
+        "dataType": "order_status",
+        "nullable": false,
+        "default": "confirmed",
+        "constraints": [
+          "NOT NULL"
+        ],
+        "sensitivity": "内部业务数据",
+        "lineage": {
+          "source": "订单服务校验后的输入或数据库生成值",
+          "target": "commerce.orders.status"
+        },
+        "comment": "订单当前业务状态",
+        "key": ""
+      }
+    },
+    {
+      "id": "COL-TOTAL",
+      "kind": "column",
+      "name": "orders.total",
+      "summary": "服务端计算的订单总额",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "parent": "TABLE-ORDERS",
+        "dataType": "numeric(14,2)",
+        "nullable": false,
+        "default": "none",
+        "constraints": [
+          "NOT NULL"
+        ],
+        "sensitivity": "财务数据",
+        "lineage": {
+          "source": "订单服务校验后的输入或数据库生成值",
+          "target": "commerce.orders.total"
+        },
+        "comment": "服务端计算的订单总额",
+        "key": "",
+        "precision": 14,
+        "scale": 2
+      }
+    },
+    {
+      "id": "COL-CREATED",
+      "kind": "column",
+      "name": "orders.created_at",
+      "summary": "订单创建时间",
+      "repo": "demo",
+      "module": "orders",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "parent": "TABLE-ORDERS",
+        "dataType": "timestamptz",
+        "nullable": false,
+        "default": "now()",
+        "constraints": [
+          "NOT NULL"
+        ],
+        "sensitivity": "内部业务数据",
+        "lineage": {
+          "source": "订单服务校验后的输入或数据库生成值",
+          "target": "commerce.orders.created_at"
+        },
+        "comment": "订单创建时间",
+        "key": ""
+      }
+    },
+    {
+      "id": "EVENT-CREATED",
+      "kind": "event",
+      "name": "order.created.v1",
+      "summary": "通过 outbox 发布的订单创建事件。",
+      "repo": "demo",
+      "module": "orders",
+      "language": "TypeScript",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "channel": "orders.events",
+        "schema": {
+          "eventId": "uuid",
+          "orderId": "uuid",
+          "tenantId": "uuid",
+          "occurredAt": "timestamp"
+        },
+        "producers": [
+          "SERVICE-ORDER"
+        ],
+        "consumers": [
+          "JOB-NOTIFY"
+        ],
+        "delivery": "at-least-once",
+        "failure": "outbox retry then dead-letter review"
+      }
+    },
+    {
+      "id": "JOB-NOTIFY",
+      "kind": "job",
+      "name": "SendOrderConfirmation",
+      "summary": "消费创建事件，生成通知并记录发送结果。",
+      "repo": "demo",
+      "module": "notifications",
+      "language": "Python / Celery",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "trigger": "order.created.v1",
+        "inputs": [
+          "eventId",
+          "orderId"
+        ],
+        "outputs": [
+          "notification delivery record"
+        ],
+        "retry": "指数退避，有限次数",
+        "idempotency": "按 eventId 去重",
+        "failure": "进入死信队列并告警"
+      },
+      "explanation": {
+        "purpose": "在订单保存后发送确认通知，避免客户一直等待通知服务响应。",
+        "howItWorks": [
+          "接收订单创建事件。",
+          "按 eventId 检查是否已处理，避免重复发送。",
+          "失败时按有限次数重试，仍失败则交给故障处理流程。"
+        ],
+        "example": "说明性假设：邮件服务暂时不可用，订单仍已创建，通知稍后重试。",
+        "failure": "通知失败不等于订单创建失败；超过重试次数的消息需处理。",
+        "boundaries": "以上为虚构行为模型，未通过真实源码、数据库或产品测试证实。",
+        "terms": [
+          {
+            "term": "死信队列",
+            "meaning": "多次处理失败后暂存消息、等待排查或重放的地方。"
+          }
+        ],
+        "evidence": [
+          "EV-DEMO"
+        ]
+      }
+    },
+    {
+      "id": "TEST-CREATE",
+      "kind": "test",
+      "name": "Order creation contract",
+      "summary": "示例验收场景清单，未在真实应用上执行。",
+      "repo": "demo",
+      "module": "quality",
+      "language": "TypeScript / pytest",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "execution": "仅示例用例清单，未在真实产品上执行",
+        "cases": [
+          "正常创建",
+          "跨租户拒绝",
+          "重复幂等键",
+          "写入失败时事务回滚"
+        ]
+      }
+    },
+    {
+      "id": "FLAG-NOTIFY",
+      "kind": "flag",
+      "name": "ORDER_CONFIRMATION_ENABLED",
+      "summary": "控制订单通知消费者是否发送消息的示例开关。",
+      "repo": "demo",
+      "module": "operations",
+      "language": "Configuration",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "default": true,
+        "scope": "environment",
+        "affects": [
+          "JOB-NOTIFY"
+        ],
+        "secret": false
+      }
+    },
+    {
+      "id": "DEPLOY-API",
+      "kind": "deployment",
+      "name": "Order API deployment",
+      "summary": "示例构建、迁移、滚动发布与健康检查阶段。",
+      "repo": "demo",
+      "module": "operations",
+      "language": "Kubernetes",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "stages": [
+          "build",
+          "unit/contract tests",
+          "image",
+          "migration",
+          "rolling deploy",
+          "readiness"
+        ],
+        "rollback": "previous image; schema rollback separately assessed",
+        "runtimeObserved": false
+      }
+    },
+    {
+      "id": "RISK-SCHEMA",
+      "kind": "risk",
+      "name": "运行库结构尚未核验",
+      "summary": "未连接数据库，不能将示例结构解释为真实数据库元数据。",
+      "repo": "demo",
+      "module": "assurance",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "severity": "高",
+        "confidence": "已知限制",
+        "action": "获取授权后读取运行库结构元数据"
+      }
+    },
+    {
+      "id": "TABLE-TENANTS",
+      "kind": "table",
+      "name": "tenancy.tenants",
+      "summary": "租户主表；一行代表一个独立的数据归属单位。",
+      "details": {
+        "qualifiedName": "demo.tenancy.tenants",
+        "columns": [
+          "TENANT-ID",
+          "TENANT-NAME"
+        ],
+        "keys": [
+          "PRIMARY KEY (id)"
+        ],
+        "indexes": [
+          "PRIMARY KEY (id)"
+        ],
+        "lifecycle": "先建立租户，再关联其订单；有关联订单时拒绝删除",
+        "readers": [
+          "SERVICE-ORDER"
+        ],
+        "writers": [
+          "外部租户管理服务，示例范围外"
+        ],
+        "schemaSource": "虚构结构，非运行库元数据"
+      },
+      "explanation": {
+        "purpose": "区分订单属于哪个组织；一行代表一个租户。",
+        "howItWorks": [
+          "建立租户标识和名称。",
+          "订单通过 tenant_id 引用租户 id。",
+          "删除仍有关联订单的租户时，外键限制会阻止删除。"
+        ],
+        "example": "说明性假设：两个租户分别创建订单，数据归属由 tenant_id 区分。",
+        "failure": "只存在外键并不能保证访问隔离，仍需要服务端权限校验。",
+        "boundaries": "租户管理入口未包含在虚构示例范围中。",
+        "terms": [
+          {
+            "term": "租户",
+            "meaning": "使用同一系统、但需要区分数据归属的组织或客户单位。"
+          }
+        ],
+        "evidence": [
+          "EV-DEMO"
+        ]
+      },
+      "repo": "demo",
+      "module": "tenancy",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "TENANT-ID",
+      "kind": "column",
+      "name": "tenants.id",
+      "summary": "唯一租户标识",
+      "details": {
+        "parent": "TABLE-TENANTS",
+        "dataType": "uuid",
+        "nullable": false,
+        "default": "生成 UUID",
+        "key": "PK",
+        "constraints": [
+          "PRIMARY KEY",
+          "NOT NULL"
+        ],
+        "sensitivity": "内部标识",
+        "comment": "订单引用的租户标识",
+        "lineage": {
+          "source": "租户管理服务",
+          "target": "COL-TENANT"
+        }
+      },
+      "repo": "demo",
+      "module": "tenancy",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "TENANT-NAME",
+      "kind": "column",
+      "name": "tenants.name",
+      "summary": "租户显示名称",
+      "details": {
+        "parent": "TABLE-TENANTS",
+        "dataType": "varchar(120)",
+        "length": 120,
+        "nullable": false,
+        "default": "无默认值",
+        "key": "",
+        "constraints": [
+          "NOT NULL"
+        ],
+        "sensitivity": "组织信息",
+        "comment": "用于区分租户的显示名称",
+        "lineage": {
+          "source": "租户管理服务",
+          "target": "租户显示界面，示例范围外"
+        }
+      },
+      "repo": "demo",
+      "module": "tenancy",
+      "language": "PostgreSQL",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "REL-1",
+      "from": "PAGE-CHECKOUT",
+      "to": "API-CREATE",
+      "kind": "HTTP_CALLS",
+      "label": "POST /api/orders",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "REL-2",
+      "from": "API-CREATE",
+      "to": "SERVICE-ORDER",
+      "kind": "CALLS",
+      "label": "validated create",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "REL-3",
+      "from": "SERVICE-ORDER",
+      "to": "TABLE-ORDERS",
+      "kind": "WRITES",
+      "label": "transactional insert",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "REL-4",
+      "from": "SERVICE-ORDER",
+      "to": "EVENT-CREATED",
+      "kind": "PRODUCES",
+      "label": "outbox commit",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "REL-5",
+      "from": "EVENT-CREATED",
+      "to": "JOB-NOTIFY",
+      "kind": "CONSUMES",
+      "label": "async delivery",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "REL-TENANT-ORDER",
+      "from": "TABLE-ORDERS",
+      "to": "TABLE-TENANTS",
+      "kind": "FOREIGN_KEY",
+      "label": "orders.tenant_id 引用 tenants.id",
+      "status": "verified",
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "relationship": "foreign-key",
+        "sourceColumns": [
+          "COL-TENANT"
+        ],
+        "targetColumns": [
+          "TENANT-ID"
+        ],
+        "onDelete": "RESTRICT"
+      }
+    }
+  ],
+  "chains": [
+    {
+      "id": "CHAIN-CREATE",
+      "name": "订单提交 / 事务持久化",
+      "status": "verified",
+      "steps": [
+        "PAGE-CHECKOUT",
+        "API-CREATE",
+        "SERVICE-ORDER",
+        "TABLE-ORDERS"
+      ],
+      "relations": [
+        "REL-1",
+        "REL-2",
+        "REL-3"
+      ],
+      "trigger": "客户提交订单",
+      "outcome": "订单与 outbox 在同一事务中持久化，响应返回订单标识。",
+      "alternatives": [
+        {
+          "condition": "validation fails",
+          "result": "400; no write"
+        },
+        {
+          "condition": "stock conflict",
+          "result": "409; transaction rollback"
+        }
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "CHAIN-NOTIFY",
+      "name": "异步通知 / 消费与重试",
+      "status": "verified",
+      "steps": [
+        "SERVICE-ORDER",
+        "EVENT-CREATED",
+        "JOB-NOTIFY"
+      ],
+      "relations": [
+        "REL-4",
+        "REL-5"
+      ],
+      "trigger": "事务提交后发布订单创建事件",
+      "outcome": "幂等消费并发送订单确认通知。",
+      "alternatives": [
+        {
+          "condition": "delivery failure",
+          "result": "bounded retry then DLQ"
+        }
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "DIAG-ARCH",
+      "type": "architecture",
+      "name": "项目架构：请求、存储与通知边界",
+      "summary": "虚构示例：项目架构：请求、存储与通知边界。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "LR",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "客户结算页 / React",
+          "entity": "PAGE-CHECKOUT",
+          "shape": "action"
+        },
+        {
+          "id": "api",
+          "label": "订单接口 / TypeScript",
+          "entity": "API-CREATE",
+          "shape": "action"
+        },
+        {
+          "id": "service",
+          "label": "订单服务 / 校验与事务",
+          "entity": "SERVICE-ORDER",
+          "shape": "action"
+        },
+        {
+          "id": "db",
+          "label": "订单存储 / PostgreSQL",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        },
+        {
+          "id": "event",
+          "label": "订单创建事件",
+          "entity": "EVENT-CREATED",
+          "shape": "action"
+        },
+        {
+          "id": "job",
+          "label": "确认通知 / Python",
+          "entity": "JOB-NOTIFY",
+          "shape": "action"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "api",
+          "label": "HTTPS 请求",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "api",
+          "to": "service",
+          "label": "经权限校验的调用",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "db",
+          "label": "事务写入",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "event",
+          "label": "提交后经 outbox 发布",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "event",
+          "to": "job",
+          "label": "消息投递",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DIAG-FLOW",
+      "type": "function-flow",
+      "name": "创建订单：从提交到结果",
+      "summary": "虚构示例：创建订单：从提交到结果。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "TB",
+      "nodes": [
+        {
+          "id": "start",
+          "label": "客户提交购物车",
+          "entity": "PAGE-CHECKOUT",
+          "shape": "start"
+        },
+        {
+          "id": "check",
+          "label": "订单符合创建规则？",
+          "entity": "FEATURE-CREATE",
+          "shape": "decision"
+        },
+        {
+          "id": "save",
+          "label": "保存订单",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        },
+        {
+          "id": "notify",
+          "label": "返回结果并安排通知",
+          "entity": "JOB-NOTIFY",
+          "shape": "end"
+        },
+        {
+          "id": "reject",
+          "label": "展示拒绝原因",
+          "entity": "PAGE-CHECKOUT",
+          "shape": "end"
+        }
+      ],
+      "edges": [
+        {
+          "from": "start",
+          "to": "check",
+          "label": "服务端校验",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "check",
+          "to": "save",
+          "label": "是",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "check",
+          "to": "reject",
+          "label": "否",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "save",
+          "to": "notify",
+          "label": "事务提交成功",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DIAG-DETAIL",
+      "type": "detail-flow",
+      "name": "创建细节：权限、重复请求与回滚",
+      "summary": "虚构示例：创建细节：权限、重复请求与回滚。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "TB",
+      "nodes": [
+        {
+          "id": "start",
+          "label": "接收请求",
+          "entity": "API-CREATE",
+          "shape": "start"
+        },
+        {
+          "id": "auth",
+          "label": "当前租户权限通过？",
+          "entity": "FEATURE-CREATE",
+          "shape": "decision"
+        },
+        {
+          "id": "deny",
+          "label": "拒绝越权请求",
+          "entity": "API-CREATE",
+          "shape": "end"
+        },
+        {
+          "id": "duplicate",
+          "label": "已有相同幂等键？",
+          "entity": "SERVICE-ORDER",
+          "shape": "decision"
+        },
+        {
+          "id": "reuse",
+          "label": "返回已有订单",
+          "entity": "API-CREATE",
+          "shape": "end"
+        },
+        {
+          "id": "valid",
+          "label": "库存与输入有效？",
+          "entity": "SERVICE-ORDER",
+          "shape": "decision"
+        },
+        {
+          "id": "invalid",
+          "label": "返回校验错误",
+          "entity": "API-CREATE",
+          "shape": "end"
+        },
+        {
+          "id": "write",
+          "label": "事务写入并提交",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        },
+        {
+          "id": "commit",
+          "label": "提交成功？",
+          "entity": "SERVICE-ORDER",
+          "shape": "decision"
+        },
+        {
+          "id": "rollback",
+          "label": "撤回写入并返回错误",
+          "entity": "SERVICE-ORDER",
+          "shape": "end"
+        },
+        {
+          "id": "done",
+          "label": "返回订单并发布事件",
+          "entity": "EVENT-CREATED",
+          "shape": "end"
+        }
+      ],
+      "edges": [
+        {
+          "from": "start",
+          "to": "auth",
+          "label": "校验",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "auth",
+          "to": "deny",
+          "label": "否",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "auth",
+          "to": "duplicate",
+          "label": "是",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "duplicate",
+          "to": "reuse",
+          "label": "是",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "duplicate",
+          "to": "valid",
+          "label": "否",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "valid",
+          "to": "invalid",
+          "label": "否",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "valid",
+          "to": "write",
+          "label": "是",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "write",
+          "to": "commit",
+          "label": "提交",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "commit",
+          "to": "rollback",
+          "label": "失败",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "commit",
+          "to": "done",
+          "label": "成功",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DIAG-SEQUENCE",
+      "type": "sequence",
+      "name": "跨组件时序：提交、响应与异步通知",
+      "summary": "虚构示例：跨组件时序：提交、响应与异步通知。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "TB",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "客户结算页 / React",
+          "entity": "PAGE-CHECKOUT",
+          "shape": "action"
+        },
+        {
+          "id": "api",
+          "label": "订单接口 / TypeScript",
+          "entity": "API-CREATE",
+          "shape": "action"
+        },
+        {
+          "id": "service",
+          "label": "订单服务 / 校验与事务",
+          "entity": "SERVICE-ORDER",
+          "shape": "action"
+        },
+        {
+          "id": "db",
+          "label": "订单存储 / PostgreSQL",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        },
+        {
+          "id": "event",
+          "label": "订单创建事件",
+          "entity": "EVENT-CREATED",
+          "shape": "action"
+        },
+        {
+          "id": "job",
+          "label": "确认通知 / Python",
+          "entity": "JOB-NOTIFY",
+          "shape": "action"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "api",
+          "label": "提交订单",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "api",
+          "to": "service",
+          "label": "校验后的请求",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "db",
+          "label": "保存订单及待发布事件",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "db",
+          "to": "service",
+          "label": "提交确认",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "api",
+          "label": "返回订单结果",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "api",
+          "to": "web",
+          "label": "201 响应",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "event",
+          "label": "提交后发布事件",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "event",
+          "to": "job",
+          "label": "异步消费",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DIAG-DATAFLOW",
+      "type": "dataflow",
+      "name": "租户字段流向：身份到存储",
+      "summary": "虚构示例：租户字段流向：身份到存储。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "LR",
+      "nodes": [
+        {
+          "id": "api",
+          "label": "请求身份 / 租户上下文",
+          "entity": "API-CREATE",
+          "shape": "action"
+        },
+        {
+          "id": "service",
+          "label": "校验当前租户的操作权限",
+          "entity": "SERVICE-ORDER",
+          "shape": "decision"
+        },
+        {
+          "id": "tenant",
+          "label": "tenant_id / 数据归属",
+          "entity": "COL-TENANT",
+          "shape": "data"
+        },
+        {
+          "id": "table",
+          "label": "订单按租户关联",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "service",
+          "label": "可信身份上下文",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "service",
+          "to": "tenant",
+          "label": "权限通过",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "tenant",
+          "to": "table",
+          "label": "写入订单",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DIAG-ER",
+      "type": "er",
+      "name": "数据表关系：租户与订单",
+      "summary": "虚构示例：数据表关系：租户与订单。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "TB",
+      "nodes": [
+        {
+          "id": "tenants",
+          "label": "租户",
+          "entity": "TABLE-TENANTS",
+          "shape": "data"
+        },
+        {
+          "id": "orders",
+          "label": "订单",
+          "entity": "TABLE-ORDERS",
+          "shape": "data"
+        }
+      ],
+      "edges": [
+        {
+          "from": "tenants",
+          "to": "orders",
+          "label": "tenants.id = orders.tenant_id",
+          "evidence": [
+            "EV-DEMO"
+          ],
+          "relationship": "foreign-key",
+          "sourceCardinality": "one",
+          "targetCardinality": "many",
+          "sourceColumns": [
+            "TENANT-ID"
+          ],
+          "targetColumns": [
+            "COL-TENANT"
+          ],
+          "constraintName": "fk_orders_tenant_id",
+          "onDelete": "RESTRICT",
+          "onUpdate": "NO ACTION"
+        }
+      ]
+    },
+    {
+      "id": "DIAG-LIFECYCLE",
+      "type": "lifecycle",
+      "name": "订单状态：确认到完成",
+      "summary": "虚构示例：订单状态：确认到完成。节点可关联对象详情，不能视为真实项目结论。",
+      "status": "verified",
+      "features": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "direction": "LR",
+      "nodes": [
+        {
+          "id": "draft",
+          "label": "草稿",
+          "entity": "FEATURE-CREATE",
+          "shape": "start"
+        },
+        {
+          "id": "confirmed",
+          "label": "已确认",
+          "entity": "COL-STATUS",
+          "shape": "action"
+        },
+        {
+          "id": "fulfilling",
+          "label": "履约中",
+          "entity": "COL-STATUS",
+          "shape": "action"
+        },
+        {
+          "id": "completed",
+          "label": "已完成",
+          "entity": "COL-STATUS",
+          "shape": "end"
+        }
+      ],
+      "edges": [
+        {
+          "from": "draft",
+          "to": "confirmed",
+          "label": "创建成功",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "confirmed",
+          "to": "fulfilling",
+          "label": "开始履约",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        },
+        {
+          "from": "fulfilling",
+          "to": "completed",
+          "label": "履约完成",
+          "evidence": [
+            "EV-DEMO"
+          ]
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "EV-DEMO",
+      "artifact": "虚构演示模型",
+      "locator": "make_example.py:example",
+      "method": "人工编写的演示数据，未读取真实业务源码",
+      "snapshot": "synthetic-example-v1",
+      "note": "图示、解释和数据结构仅供展示，不代表真实系统的已验证行为。"
+    }
+  ],
+  "discoveries": [
+    {
+      "id": "DISC-FEATURE-CREATE",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-PAGE-CHECKOUT",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "PAGE-CHECKOUT"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-API-CREATE",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "API-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-SERVICE-ORDER",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "SERVICE-ORDER"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-TABLE-ORDERS",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "TABLE-ORDERS"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-COL-ID",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "COL-ID"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-COL-TENANT",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "COL-TENANT"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-COL-STATUS",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "COL-STATUS"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-COL-TOTAL",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "COL-TOTAL"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-COL-CREATED",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "COL-CREATED"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-EVENT-CREATED",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "EVENT-CREATED"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-JOB-NOTIFY",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "JOB-NOTIFY"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-TEST-CREATE",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "TEST-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-FLAG-NOTIFY",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "FLAG-NOTIFY"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-DEPLOY-API",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "DEPLOY-API"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-RISK-SCHEMA",
+      "scope": "synthetic fixture",
+      "method": "Authored example registry",
+      "disposition": "mapped",
+      "reason": "Synthetic example mapping",
+      "entities": [
+        "RISK-SCHEMA"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-TABLE-TENANTS",
+      "scope": "虚构注册表",
+      "method": "演示模型登记，非真实独立发现",
+      "disposition": "mapped",
+      "reason": "仅供展示",
+      "entities": [
+        "TABLE-TENANTS"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-TENANT-ID",
+      "scope": "虚构注册表",
+      "method": "演示模型登记，非真实独立发现",
+      "disposition": "mapped",
+      "reason": "仅供展示",
+      "entities": [
+        "TENANT-ID"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    },
+    {
+      "id": "DISC-TENANT-NAME",
+      "scope": "虚构注册表",
+      "method": "演示模型登记，非真实独立发现",
+      "disposition": "mapped",
+      "reason": "仅供展示",
+      "entities": [
+        "TENANT-NAME"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-DEMO",
+      "scope": "虚构模型",
+      "status": "passed",
+      "result": "示例记录已登记；未执行真实产品测试",
+      "evidence": [
+        "EV-DEMO"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "scope",
+      "title": "范围与证据边界",
+      "summary": "虚构的前后端联合分析样例；没有扫描实际业务仓库。",
+      "status": "verified",
+      "entities": [],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "architecture",
+      "title": "架构与系统边界",
+      "summary": "React 入口、TypeScript API、Python 消费者和 PostgreSQL 存储。",
+      "status": "verified",
+      "entities": [
+        "PAGE-CHECKOUT",
+        "API-CREATE",
+        "JOB-NOTIFY",
+        "TABLE-ORDERS"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "PAGE-CHECKOUT",
+          "API-CREATE",
+          "JOB-NOTIFY",
+          "TABLE-ORDERS"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "features",
+      "title": "业务能力与规则",
+      "summary": "订单创建、校验、幂等、事务及通知的示例业务规则。",
+      "status": "verified",
+      "entities": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "FEATURE-CREATE"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "frontend",
+      "title": "页面与交互状态",
+      "summary": "结算页的加载、提交、失败和成功状态。",
+      "status": "verified",
+      "entities": [
+        "PAGE-CHECKOUT"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "PAGE-CHECKOUT"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "api",
+      "title": "接口契约与联调",
+      "summary": "请求字段、认证要求、响应结构与错误语义。",
+      "status": "verified",
+      "entities": [
+        "API-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "API-CREATE"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "data",
+      "title": "数据字典与血缘",
+      "summary": "2 张表、全部 7 个字段及租户与订单的关联；运行库未核验。",
+      "status": "unknown",
+      "entities": [
+        "TABLE-ORDERS",
+        "TABLE-TENANTS"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "TABLE-ORDERS"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "chains",
+      "title": "同步与异步链路",
+      "summary": "请求事务链路和异步事件消费链路分别表达。",
+      "status": "verified",
+      "entities": [
+        "SERVICE-ORDER",
+        "EVENT-CREATED"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "SERVICE-ORDER",
+          "EVENT-CREATED"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "jobs",
+      "title": "后台任务与消息",
+      "summary": "消费者的重试、去重与失败处理。",
+      "status": "verified",
+      "entities": [
+        "JOB-NOTIFY"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "JOB-NOTIFY"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "configuration",
+      "title": "配置与功能开关",
+      "summary": "环境级通知开关及影响范围。",
+      "status": "verified",
+      "entities": [
+        "FLAG-NOTIFY"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "FLAG-NOTIFY"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "security",
+      "title": "权限与数据边界",
+      "summary": "租户隔离和创建订单权限为示例规则。",
+      "status": "verified",
+      "entities": [
+        "FEATURE-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "FEATURE-CREATE"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "testing",
+      "title": "测试与验收",
+      "summary": "仅列出示例用例，不宣称真实产品测试通过。",
+      "status": "verified",
+      "entities": [
+        "TEST-CREATE"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "TEST-CREATE"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "delivery",
+      "title": "构建、发布与回滚",
+      "summary": "构建产物、数据库迁移、滚动发布与就绪检查。",
+      "status": "verified",
+      "entities": [
+        "DEPLOY-API"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "DEPLOY-API"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "operations",
+      "title": "运维与故障恢复",
+      "summary": "失败事件与运行库证据仍需在真实分析中核验。",
+      "status": "verified",
+      "entities": [
+        "JOB-NOTIFY"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "JOB-NOTIFY"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "dependencies",
+      "title": "依赖与许可证",
+      "summary": "示例未包含实际项目依赖清单。",
+      "status": "verified",
+      "entities": [],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "risks",
+      "title": "风险与待核实事项",
+      "summary": "明确区分示例事实、运行库缺口和真实项目结论。",
+      "status": "verified",
+      "entities": [
+        "RISK-SCHEMA"
+      ],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [
+          "RISK-SCHEMA"
+        ],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    },
+    {
+      "id": "coverage",
+      "title": "覆盖率与对账",
+      "summary": "零源文件分母显示未计量，不能显示 100%。",
+      "status": "verified",
+      "entities": [],
+      "evidence": [
+        "EV-DEMO"
+      ],
+      "details": {
+        "scope": "虚构演示范围",
+        "entities": [],
+        "review": "真实分析时必须替换为源码和结构证据"
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "GAP-LIVE-DB",
+      "status": "open",
+      "summary": "示例未读取真实数据库和业务源码。",
+      "nextAction": "在目标项目运行本 Skill，收集真实源码和经授权的结构元数据。"
+    }
+  ]
+}
