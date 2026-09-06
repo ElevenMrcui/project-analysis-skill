@@ -4,3 +4,6 @@
 .Spotlight-V100
 .Trashes
 Thumbs.db
+__pycache__/
+*.pyc
+.DS_Store
