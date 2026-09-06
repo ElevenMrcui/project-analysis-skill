@@ -33,7 +33,7 @@
 在目标项目的 Copilot 对话中给出以下要求，并将路径换成实际位置：
 
 ```text
-读取并执行 <你的 skill 路径>/project-analysis/SKILL.md。
+安装 https://github.com/ElevenMrcui/project-analysis-skill，
 分析当前工作区全部项目；如有关联前后端仓库，将其共同纳入范围。
 优先保证分析深度、事实正确和功能/数据覆盖，不只总结目录或 README。
 报告使用中文，先讲清业务，再给实现细节与源码证据。
